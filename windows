@@ -1,0 +1,90 @@
+
+from lxml import etree
+from datetime import datetime
+import pytz
+from io import StringIO, BytesIO
+import requests
+
+class windows:
+    def __init__(self):
+        self.source = 'http://dd.weather.gc.ca/citypage_weather/xml/ON/s0000430_e.xml'
+        def xml_load():
+            payload = requests.get(self.source)
+            data = payload.content
+            root = etree.XML(data)
+            return root
+        self.rt = xml_load()
+        self.temp = self.reach_out()
+        self.timestamp = self.time_st()
+        self.ex = self.extras()
+        self.wind_desc = None
+        def chk():
+            if None in (self.temp, self.timestamp, self.ex):
+                return False
+            else:
+                return True
+        self.gtg = chk()
+
+
+    def reach_out(self):
+        return self.rt.xpath("//currentConditions/temperature")[0].text
+        # temp_str = str(etree.tostring(temp_xml, encoding='unicode', method='text'))
+        # temp_str = temp_str.replace("\n", "").rstrip()
+
+    def extras(self):
+        temp_xml = self.rt.xpath("//currentConditions/pressure")[0]
+        humi = self.rt.xpath("//currentConditions/humidex")[0].text
+        rel_hum = self.rt.xpath("//currentConditions/humidex")[0].text
+        wind = self.rt.xpath("//currentConditions/wind/speed")[0]
+        num = int(wind.text)
+        wind_classes = [
+            (0, 1, "Calm"),
+            (2, 5, "Light Air"),
+            (6, 11, "Light Breeze"),
+            (12, 19, "Gentle Breeze"),
+            (20, 28, "Moderate Breeze"),
+            (29, 38, "Fresh Breeze"),
+            (39, 49, "Strong Breeze"),
+            (50, 61, "High Wind, Moderate Gale"),
+            (62, 74, "Gale"),
+            (75, 88, "Strong/Severe Gale"),
+            (89, 102, "STORM - WHOLE GALE!!"),
+            (103, 117, "VIOLENT STORM"),
+            (118, 500, "HURRICANE -- GET OUT!!!!")
+        ]
+        for n, (start, stop, wc) in enumerate(wind_classes):
+            if num >= start:
+                if num <= stop:
+                    self.wind_desc = (wc, n)
+                    break
+        result = {
+            "pressure": f"{temp_xml.text}",
+            "pressure_tendency": f"{temp_xml.attrib['tendency']}",
+            "pressure_change": f"{temp_xml.attrib['change']}",
+            "humidex": f"{humi}",
+            "rel_humidity": f"{rel_hum}",
+            "wind": f"{wind.text}",
+            "wind_desc": f"{self.wind_desc[0]} - Phase {self.wind_desc[1]}"
+        }
+        # temp_flt = float(temp_str)
+        return result
+
+
+    def time_st(self):
+        timest = self.rt.xpath('//currentConditions/dateTime[@UTCOffset="-4"]/timeStamp')[0]
+        date = datetime.strptime(timest.text, '%Y%m%d%H%M%S')
+        dstrf = date.strftime("%A, %d. %B %Y %I:%M%p")
+        return dstrf
+
+
+    def check_values(self):
+        if not self.gtg:
+            return "INVALID::: FALSE"
+        else:
+            return self.temp, self.timestamp, self.ex
+
+
+
+
+
+print(windows().check_values())
